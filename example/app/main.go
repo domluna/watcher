@@ -4,29 +4,26 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 	// "strings"
 
 	"github.com/domluna/watcher"
 )
 
 func main() {
-	w, err := watcher.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Watching: ", dir)
-
-	err = w.AddFiles(dir)
-	// err = w.AddFiles("$HOME/Desktop/the_stars/simple-todos")
+	w, err := watcher.NewWatcher(dir)
+	// w, err := watcher.NewWatcher("$HOME/Desktop/the_stars/simple-todos")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println("Watching: ", dir)
 
 	// Listen part
 	done := make(chan struct{})
@@ -34,20 +31,25 @@ func main() {
 		close(done)
 	}()
 
-	fchan, errc := w.Watch(done)
+	fchan := w.Watch()
 
 	go func() {
 		for {
 			select {
-			case fi := <-fchan:
-				fmt.Println(fi)
-			case err = <-errc:
-				fmt.Println(err)
+			// case _ = <-fchan:
+			case fi, ok := <-fchan:
+				if !ok {
+					done <- struct{}{}
+					return
+				}
+				fmt.Println("RECIEVED:", fi, ok)
+			default:
 			}
 		}
 	}()
 
-	// time.Sleep(10 * time.Second)
-	// done <- struct{}{}
+	w.Close()
 	<-done
+	time.Sleep(5 * time.Second)
+	fmt.Println("WE DONE!")
 }

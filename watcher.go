@@ -30,7 +30,6 @@ type FileEvent struct {
 
 // String returns a string representation of a FileEvent.
 func (fe FileEvent) String() string {
-	// return fmt.Sprintf("FILEVENT:")
 	return fmt.Sprintf("%s", fe.Name)
 }
 
@@ -41,16 +40,36 @@ type Watcher struct {
 	files map[string]struct{}
 
 	ignorers []Ignorer
+	fchan    chan *FileEvent
+	done     chan struct{}
+
+	isClosed bool
 }
 
-// Kill shutdowns all currently active channels the Watcher is
-// interacting with.
-func (w *Watcher) Kill() error {
-	log.Println("Attempting to shutdown watcher ...")
-	if err := w.fsw.Close(); err != nil {
-		return err
+func (w *Watcher) wait() {
+	defer func() {
+		close(w.done)
+	}()
+	for {
+		select {
+		case <-w.done:
+			w.fsw.Close()
+			close(w.fchan)
+			return
+		default:
+		}
 	}
-	return nil
+}
+
+// Close the watcher.
+func (w *Watcher) Close() {
+	if w.isClosed {
+		return
+	}
+	log.Println("CLOSING WATCHER")
+	log.Println("SENDING TO DONE")
+	w.isClosed = true
+	w.done <- struct{}{}
 }
 
 // SetOptions sets options.
@@ -64,23 +83,37 @@ func (w *Watcher) SetOptions(options ...func(*Watcher) error) error {
 }
 
 // NewWatcher creates a Watcher.
-func NewWatcher(options ...func(*Watcher) error) (*Watcher, error) {
-	w := Watcher{}
+func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) {
+	w := Watcher{
+		done:  make(chan struct{}),
+		fchan: make(chan *FileEvent),
+	}
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
+
 	w.fsw = fsw
 	w.ignorers = append(w.ignorers, IgnoreDotfiles)
+
 	if err = w.SetOptions(options...); err != nil {
 		return nil, err
 	}
+
+	err = w.addFiles(root)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait for the close signal.
+	go w.wait()
 	return &w, nil
 }
 
+
 // AddFiles starts to recurse from the root and add files to
 // the watch list.
-func (w *Watcher) AddFiles(root string) error {
+func (w *Watcher) addFiles(root string) error {
 	root = os.ExpandEnv(root)
 	errc := w.walkFS(root)
 
@@ -91,40 +124,46 @@ func (w *Watcher) AddFiles(root string) error {
 }
 
 // Watch watches stuff.
-func (w *Watcher) Watch(kill chan struct{}) (chan FileEvent, <-chan error) {
-	// Size of chan is the number of ops.
-	fchan := make(chan FileEvent, 5)
-	errc := make(chan error, 1)
-
-	// Start to receive the kill signal.
+func (w *Watcher) Watch() <-chan *FileEvent {
 	go func() {
+		defer func() {
+			log.Println("EXITING GOROUTINE")
+		}()
+
 		for {
 			select {
-			case _ = <-kill:
-				w.Kill()
+			case ev, ok := <-w.fsw.Events:
+				log.Println("EVENT", ev, ok)
+
+				// If the fsnotify event chan is closed
+				// there's no reason for this goroutine to
+				// keep running.
+				if !ok {
+					log.Println("EXITING WATCH CHAN")
+					return
+				}
+
+				fi := &FileEvent{
+					Name: ev.String(),
+					// Op: ev.Op,
+				}
+				w.fchan <- fi
+			case err, ok := <-w.fsw.Errors:
+				log.Println("ERROR", err, ok)
+
+				// If the channel is closed done has
+				// already been shutdown.
+				if !ok {
+					log.Println("EXITING WATCH CHAN")
+					return
+				}
+				w.done <- struct{}{}
 				return
 			}
 		}
 	}()
 
-	// Start listening on the fsnotify watcher channels
-	go func() {
-		for {
-			select {
-			case ev := <-w.fsw.Events:
-				log.Println(ev)
-				fi := FileEvent{
-					Name: ev.String(),
-					// Op: ev.Op,
-				}
-				fchan <- fi
-			case err := <-w.fsw.Errors:
-				errc <- err
-			}
-		}
-	}()
-
-	return fchan, errc
+	return w.fchan
 }
 
 // ignore loops through our ignorers to see if we should ignore
@@ -164,13 +203,11 @@ func (w *Watcher) walkFS(root string) <-chan error {
 				return nil
 			}
 
-			fmt.Println(path)
+			log.Println(path)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				// check ignore files here
-				// fmt.Println(path)
-				fmt.Println("ADDING:", info.Name())
+				log.Println("ADDING:", info.Name())
 				w.fsw.Add(path)
 			}()
 			return nil
@@ -183,4 +220,7 @@ func (w *Watcher) walkFS(root string) <-chan error {
 
 	}()
 	return errc
+}
+
+func parseEvent(ev fsnotify.Event) *FileEvent {
 }

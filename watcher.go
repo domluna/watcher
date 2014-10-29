@@ -21,10 +21,11 @@ type FileEvent struct {
 	Path string
 	// Name of the file.
 	Name string
-	// The file extension, ex. html,js
+	// The file extension, ex. html, js
 	Ext string
 	// The operation that triggered the event
 	Op
+	// Time the event occurred.
 	time.Time
 }
 
@@ -109,7 +110,6 @@ func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) 
 	go w.wait()
 	return &w, nil
 }
-
 
 // AddFiles starts to recurse from the root and add files to
 // the watch list.

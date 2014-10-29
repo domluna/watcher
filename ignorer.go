@@ -6,7 +6,7 @@ import "strings"
 // true if the string should be ignored, false otherwise.
 type Ignorer func(string) bool
 
-// IgnoreFirstDot ignores any file/directory that starts with a "."
+// IgnoreDotfiles ignores any file/directory that starts with a "."
 func IgnoreDotfiles(s string) bool {
 	return strings.HasPrefix(s, ".")
 }

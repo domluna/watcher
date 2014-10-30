@@ -1,3 +1,5 @@
+// This just shows a basic way to setup
+// a watcher and get started.
 package main
 
 import (
@@ -16,39 +18,41 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// w, err := watcher.NewWatcher(dir)
-	w, err := watcher.NewWatcher("$HOME/Desktop/the_stars/simple-todos")
+	w, err := watcher.NewWatcher(dir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Watching: ", dir)
-
-	// Listen part
 	done := make(chan struct{})
 	defer func() {
 		close(done)
 	}()
 
+	// Start watching our current directory
 	fchan := w.Watch()
 
+	// receive messages from fchan
 	go func() {
 		for {
 			select {
 			// case _ = <-fchan:
 			case fi, ok := <-fchan:
-				fmt.Println("RECIEVED:", fi, ok)
+				// no more messages, exit goroutine and signal done
 				if !ok {
 					done <- struct{}{}
 					return
 				}
-			default:
+				fmt.Println("recieved:", fi)
 			}
 		}
 	}()
 
-	time.Sleep(5 * time.Second)
-	w.Close()
+	go func() {
+		// shutdown the watcher
+		time.Sleep(3 * time.Second)
+		w.Close()
+	}()
+
 	<-done
 	fmt.Println("WE DONE!")
 }

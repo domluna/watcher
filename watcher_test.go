@@ -15,7 +15,7 @@ var (
 )
 
 const (
-	testDuration  = time.Second * 3
+	testDuration  = time.Second * 4
 	writeInterval = time.Millisecond * 10
 )
 
@@ -94,7 +94,10 @@ func Test_IgnoreDotfiles(t *testing.T) {
 	done <- struct{}{}
 }
 
-// We're writing
+// Idea here is we're writing to 2 files that are being watched.
+// Also during halfway through the test we shutdown the watcher,
+// thus if races were to occur during shutdown they would be found
+// here as well.
 func Test_DataRace(t *testing.T) {
 	done := make(chan struct{})
 	defer func() {

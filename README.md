@@ -20,6 +20,8 @@ $ go test --race
 It's working just need to clean up some small things.
 
 TODO: finish parsing the fsnotify event for type of OP
+
 TODO: finish NewWatcher, where do we add an ignorer, etc
+
 TODO: Add GoDoc link + more docs?
 

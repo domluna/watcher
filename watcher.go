@@ -84,7 +84,7 @@ func (w *Watcher) SetOptions(options ...func(*Watcher) error) error {
 // NewWatcher creates a Watcher.
 func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) {
 	w := Watcher{
-		done:  make(chan struct{}),
+		done: make(chan struct{}),
 	}
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -180,7 +180,7 @@ func (w *Watcher) walkFS(root string) <-chan error {
 
 			// If it's an directory and it matches our ignore
 			// clause, then skip looking at the whole directory
-			if w.ignore(info.Name()) && info.IsDir() {
+			if w.ignore(filepath.Base(info.Name())) && info.IsDir() {
 				return filepath.SkipDir
 			}
 

@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"time"
-	// "strings"
 
 	"github.com/domluna/watcher"
 )
@@ -17,8 +16,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	w, err := watcher.NewWatcher(dir)
-	// w, err := watcher.NewWatcher("$HOME/Desktop/the_stars/simple-todos")
+	// w, err := watcher.NewWatcher(dir)
+	w, err := watcher.NewWatcher("$HOME/Desktop/the_stars/simple-todos")
 	if err != nil {
 		log.Fatal(err)
 	}

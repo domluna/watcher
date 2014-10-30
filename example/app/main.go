@@ -38,18 +38,18 @@ func main() {
 			select {
 			// case _ = <-fchan:
 			case fi, ok := <-fchan:
+				fmt.Println("RECIEVED:", fi, ok)
 				if !ok {
 					done <- struct{}{}
 					return
 				}
-				fmt.Println("RECIEVED:", fi, ok)
 			default:
 			}
 		}
 	}()
 
+	time.Sleep(5 * time.Second)
 	w.Close()
 	<-done
-	time.Sleep(5 * time.Second)
 	fmt.Println("WE DONE!")
 }

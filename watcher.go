@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ type FileEvent struct {
 
 // String returns a string representation of a FileEvent.
 func (fe FileEvent) String() string {
-	return fmt.Sprintf("%s", fe.Name)
+	return fmt.Sprintf("%v %s", fe.Time, fe.Name)
 }
 
 // Watcher watches files for changes
@@ -41,7 +42,6 @@ type Watcher struct {
 	files map[string]struct{}
 
 	ignorers []Ignorer
-	fchan    chan *FileEvent
 	done     chan struct{}
 
 	isClosed bool
@@ -55,7 +55,6 @@ func (w *Watcher) wait() {
 		select {
 		case <-w.done:
 			w.fsw.Close()
-			close(w.fchan)
 			return
 		default:
 		}
@@ -68,7 +67,6 @@ func (w *Watcher) Close() {
 		return
 	}
 	log.Println("CLOSING WATCHER")
-	log.Println("SENDING TO DONE")
 	w.isClosed = true
 	w.done <- struct{}{}
 }
@@ -87,7 +85,6 @@ func (w *Watcher) SetOptions(options ...func(*Watcher) error) error {
 func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) {
 	w := Watcher{
 		done:  make(chan struct{}),
-		fchan: make(chan *FileEvent),
 	}
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -125,7 +122,9 @@ func (w *Watcher) addFiles(root string) error {
 
 // Watch watches stuff.
 func (w *Watcher) Watch() <-chan *FileEvent {
+	fchan := make(chan *FileEvent, 5)
 	go func() {
+		defer close(fchan)
 		defer func() {
 			log.Println("EXITING GOROUTINE")
 		}()
@@ -133,8 +132,6 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 		for {
 			select {
 			case ev, ok := <-w.fsw.Events:
-				log.Println("EVENT", ev, ok)
-
 				// If the fsnotify event chan is closed
 				// there's no reason for this goroutine to
 				// keep running.
@@ -142,28 +139,22 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 					log.Println("EXITING WATCH CHAN")
 					return
 				}
-
-				fi := &FileEvent{
-					Name: ev.String(),
-					// Op: ev.Op,
-				}
-				w.fchan <- fi
+				fchan <- parseEvent(ev)
 			case err, ok := <-w.fsw.Errors:
-				log.Println("ERROR", err, ok)
-
 				// If the channel is closed done has
 				// already been shutdown.
 				if !ok {
 					log.Println("EXITING WATCH CHAN")
 					return
 				}
+				log.Println(err)
 				w.done <- struct{}{}
 				return
 			}
 		}
 	}()
 
-	return w.fchan
+	return fchan
 }
 
 // ignore loops through our ignorers to see if we should ignore
@@ -198,8 +189,8 @@ func (w *Watcher) walkFS(root string) <-chan error {
 				return nil
 			}
 
-			// If a file matches a ignore clause, move on.
-			if w.ignore(info.Name()) {
+			// If a file matches a ignore clause or is a directory move on.
+			if !info.IsDir() {
 				return nil
 			}
 
@@ -222,5 +213,22 @@ func (w *Watcher) walkFS(root string) <-chan error {
 	return errc
 }
 
+// parseEvent parses the event wrapping it into a filevent
+// making it easier to work with.
 func parseEvent(ev fsnotify.Event) *FileEvent {
+	spl := strings.Split(ev.String(), " ")
+	// fmt.Println(spl, len(spl))
+
+	fi := &FileEvent{}
+
+	if len(spl) > 0 {
+		path := spl[0]
+		// op := Op(ev.Op)
+
+		fi.Ext = filepath.Ext(path)
+		fi.Path = path
+		fi.Name = filepath.Base(path)
+		fi.Time = time.Now()
+	}
+	return fi
 }

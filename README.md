@@ -1,7 +1,8 @@
 watcher
 -------
 
-Watches stuff. See the docs at ?
+Watches stuff, well ... files.
+View the [docs](https://godoc.org/github.com/domluna/watcher)
 
 ### Install
 
@@ -20,8 +21,3 @@ $ go test --race
 It's working just need to clean up some small things.
 
 TODO: finish parsing the fsnotify event for type of OP
-
-TODO: finish NewWatcher, where do we add an ignorer, etc
-
-TODO: Add GoDoc link + more docs?
-

@@ -27,11 +27,6 @@ type FileEvent struct {
 	Op
 }
 
-// String returns a string representation of a FileEvent.
-func (fe FileEvent) String() string {
-	return fmt.Sprintf("%s", fe.Name)
-}
-
 // Watcher watches files for changes
 type Watcher struct {
 	fsw *fsnotify.Watcher

@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -63,8 +62,8 @@ func (w *Watcher) Close() {
 	w.done <- struct{}{}
 }
 
-// NewWatcher creates a Watcher.
-func NewWatcher(root string, ignorers ...func(string) bool) (*Watcher, error) {
+// New creates a Watcher.
+func New(root string, ignorers ...func(string) bool) (*Watcher, error) {
 	w := Watcher{
 		done: make(chan struct{}),
 	}

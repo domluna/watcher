@@ -60,7 +60,7 @@ func Test_IgnoreDotfiles(t *testing.T) {
 		ignoreFile.Close()
 	}()
 
-	w, err := NewWatcher(testDir)
+	w, err := New(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func Test_DataRace(t *testing.T) {
 		writeFile2.Close()
 	}()
 
-	w, err := NewWatcher(testDir)
+	w, err := New(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}

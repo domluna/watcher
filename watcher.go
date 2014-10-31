@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"gopkg.in/fsnotify.v1"
 )
@@ -26,13 +25,6 @@ type FileEvent struct {
 	Ext string
 	// The operation that triggered the event
 	Op
-	// Time the event occurred.
-	time.Time
-}
-
-// String returns a string representation of a FileEvent.
-func (fe FileEvent) String() string {
-	return fmt.Sprintf("%v %s", fe.Time, fe.Name)
 }
 
 // Watcher watches files for changes
@@ -41,7 +33,7 @@ type Watcher struct {
 
 	files map[string]struct{}
 
-	ignorers []Ignorer
+	ignorers []func(string) bool
 	done     chan struct{}
 
 	isClosed bool
@@ -71,18 +63,8 @@ func (w *Watcher) Close() {
 	w.done <- struct{}{}
 }
 
-// SetOptions sets options.
-func (w *Watcher) SetOptions(options ...func(*Watcher) error) error {
-	for _, opt := range options {
-		if err := opt(w); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // NewWatcher creates a Watcher.
-func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) {
+func NewWatcher(root string, ignorers ...func(string) bool) (*Watcher, error) {
 	w := Watcher{
 		done: make(chan struct{}),
 	}
@@ -94,8 +76,8 @@ func NewWatcher(root string, options ...func(*Watcher) error) (*Watcher, error) 
 	w.fsw = fsw
 	w.ignorers = append(w.ignorers, IgnoreDotfiles)
 
-	if err = w.SetOptions(options...); err != nil {
-		return nil, err
+	for _, ign := range ignorers {
+		w.ignorers = append(w.ignorers, ign)
 	}
 
 	err = w.addFiles(root)
@@ -228,7 +210,6 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 		fi.Ext = filepath.Ext(path)
 		fi.Path = path
 		fi.Name = filepath.Base(path)
-		fi.Time = time.Now()
 	}
 	return fi
 }

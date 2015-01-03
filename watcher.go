@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -197,7 +198,7 @@ func (w *Watcher) walkFS(root string) <-chan error {
 // parseEvent parses the event wrapping it into a filevent
 // making it easier to work with.
 func parseEvent(ev fsnotify.Event) *FileEvent {
-	spl := strings.Split(ev.String(), " ")
+	spl := strings.Split(ev.String(), ": ")
 	// fmt.Println(spl, len(spl))
 
 	fi := &FileEvent{}
@@ -206,9 +207,13 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 		path := spl[0]
 		// op := Op(ev.Op)
 
+		path = strings.Trim(path, "\"")
+
+		fmt.Println(path)
 		fi.Ext = filepath.Ext(path)
-		fi.Path = path
 		fi.Name = filepath.Base(path)
+		fi.Path = path
+		fi.Op = Op(ev.Op)
 	}
 	return fi
 }

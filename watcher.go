@@ -8,11 +8,19 @@ import (
 	"strings"
 	"sync"
 
-	"gopkg.in/fsnotify.v1"
+	"github.com/go-fsnotify/fsnotify"
 )
 
 // Op describes a set of file operations. Wraps fsnotify.
-type Op fsnotify.Op
+type Op uint32
+
+const (
+	Create Op = iota
+	Write
+	Remove
+	Rename
+	Chmod
+)
 
 // FileEvent wraps information about the file events
 // from fsnotify.
@@ -197,13 +205,11 @@ func (w *Watcher) walkFS(root string) <-chan error {
 // making it easier to work with.
 func parseEvent(ev fsnotify.Event) *FileEvent {
 	spl := strings.Split(ev.String(), ": ")
-	// fmt.Println(spl, len(spl))
 
 	fi := &FileEvent{}
 
 	if len(spl) > 0 {
 		path := spl[0]
-		// op := Op(ev.Op)
 
 		path = strings.Trim(path, "\"")
 
@@ -211,7 +217,21 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 		fi.Ext = filepath.Ext(path)
 		fi.Name = filepath.Base(path)
 		fi.Path = path
-		fi.Op = Op(ev.Op)
+
+		switch ev.Op {
+		case fsnotify.Create:
+			fi.Op = Create
+		case fsnotify.Chmod:
+			fi.Op = Chmod
+		case fsnotify.Write:
+			fi.Op = Write
+		case fsnotify.Remove:
+			fi.Op = Remove
+		case fsnotify.Rename:
+			fi.Op = Rename
+		}
 	}
+
+	fmt.Println(fi)
 	return fi
 }

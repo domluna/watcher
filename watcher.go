@@ -227,6 +227,8 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 	return fi
 }
 
+// ignore ignores files that are prefixed with a dot
+// or underscore.
 func ignore(name string) bool {
 	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }

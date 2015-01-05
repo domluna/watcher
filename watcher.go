@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,7 +14,7 @@ import (
 type Op uint32
 
 const (
-	Create Op = iota
+	Create Op = iota << 1
 	Write
 	Remove
 	Rename
@@ -129,7 +128,21 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 				if !ok {
 					break
 				}
-				fchan <- parseEvent(ev)
+				pe := parseEvent(ev)
+
+				// Remove and add files from the watcher
+				switch pe.Op {
+				case Create:
+					if !w.ignore(pe.Name) {
+						log.Println("Adding", pe.Name)
+						w.fsw.Add(pe.Path)
+					}
+				case Remove:
+					log.Println("Removing", pe.Name)
+					w.fsw.Remove(pe.Path)
+				}
+
+				fchan <- pe
 			case err, ok := <-w.fsw.Errors:
 				// If the channel is closed done has
 				// already been shutdown.
@@ -169,24 +182,19 @@ func (w *Watcher) walkFS(root string) <-chan error {
 			// If it's an directory and it matches our ignore
 			// clause, then skip looking at the whole directory
 			if w.ignore(filepath.Base(info.Name())) && info.IsDir() {
+				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return filepath.SkipDir
 			}
 
-			// If the file isn't regular and not a directory, move on.
-			if !info.Mode().IsRegular() && !info.IsDir() {
+			if w.ignore(filepath.Base(info.Name())) {
+				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return nil
 			}
 
-			// If a file matches a ignore clause or is a directory move on.
-			if !info.IsDir() {
-				return nil
-			}
-
-			log.Println(path)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				log.Println("ADDING:", info.Name())
+				log.Println("Initially adding:", info.Name())
 				w.fsw.Add(path)
 			}()
 			return nil
@@ -213,7 +221,6 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 
 		path = strings.Trim(path, "\"")
 
-		fmt.Println(path)
 		fi.Ext = filepath.Ext(path)
 		fi.Name = filepath.Base(path)
 		fi.Path = path
@@ -232,6 +239,5 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 		}
 	}
 
-	fmt.Println(fi)
 	return fi
 }

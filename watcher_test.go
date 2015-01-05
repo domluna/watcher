@@ -1,10 +1,12 @@
-package watcher
+package watcher_test
 
 import (
 	"io/ioutil"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/domluna/watcher"
 )
 
 var (
@@ -60,29 +62,17 @@ func Test_IgnoreDotfiles(t *testing.T) {
 		ignoreFile.Close()
 	}()
 
-	w, err := New(testDir)
+	w, err := watcher.New(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fchan := w.Watch()
-	go func() {
-		for {
-			select {
-			// We should never get anything out this channel
-			case <-fchan:
-				t.Error(err)
-			default:
-			}
-
-		}
-	}()
 
 	// Write to the ignored file
 	go func() {
 		for {
 			select {
 			case <-done:
-				// w.Close()
+				w.Close()
 				return
 			default:
 				ignoreFile.Write([]byte("HELLO"))
@@ -90,6 +80,15 @@ func Test_IgnoreDotfiles(t *testing.T) {
 			}
 		}
 	}()
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		_, err := ioutil.TempFile(testDir, ".dotfile")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	time.Sleep(testDuration)
 	done <- struct{}{}
 }
@@ -106,7 +105,7 @@ func Test_DataRace(t *testing.T) {
 		writeFile2.Close()
 	}()
 
-	w, err := New(testDir)
+	w, err := watcher.New(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}

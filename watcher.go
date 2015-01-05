@@ -34,18 +34,19 @@ type FileEvent struct {
 	Op
 }
 
-// Watcher watches files for changes
+// Watcher watches files for changes. It recursively
+// add files to be watched.
 type Watcher struct {
 	fsw *fsnotify.Watcher
 
 	files map[string]struct{}
 
-	ignorers []func(string) bool
-	done     chan struct{}
+	done chan struct{}
 
 	isClosed bool
 }
 
+// wait waits for the watcher to shut down.
 func (w *Watcher) wait() {
 	defer func() {
 		close(w.done)
@@ -60,7 +61,7 @@ func (w *Watcher) wait() {
 	}
 }
 
-// Close the watcher.
+// Close closes the watcher.
 func (w *Watcher) Close() {
 	if w.isClosed {
 		return
@@ -71,7 +72,7 @@ func (w *Watcher) Close() {
 }
 
 // New creates a Watcher.
-func New(root string, ignorers ...func(string) bool) (*Watcher, error) {
+func New(root string) (*Watcher, error) {
 	w := Watcher{
 		done: make(chan struct{}),
 	}
@@ -81,11 +82,6 @@ func New(root string, ignorers ...func(string) bool) (*Watcher, error) {
 	}
 
 	w.fsw = fsw
-	w.ignorers = append(w.ignorers, IgnoreDotfiles)
-
-	for _, ign := range ignorers {
-		w.ignorers = append(w.ignorers, ign)
-	}
 
 	err = w.addFiles(root)
 	if err != nil {
@@ -133,7 +129,7 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 				// Remove and add files from the watcher
 				switch pe.Op {
 				case Create:
-					if !w.ignore(pe.Name) {
+					if !ignore(pe.Name) {
 						log.Println("Adding", pe.Name)
 						w.fsw.Add(pe.Path)
 					}
@@ -158,17 +154,6 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 	return fchan
 }
 
-// ignore loops through our ignorers to see if we should ignore
-// the path.
-func (w *Watcher) ignore(path string) bool {
-	for _, i := range w.ignorers {
-		if i(path) {
-			return true
-		}
-	}
-	return false
-}
-
 // walkFS walks the filesystem.
 func (w *Watcher) walkFS(root string) <-chan error {
 	errc := make(chan error, 1)
@@ -181,12 +166,12 @@ func (w *Watcher) walkFS(root string) <-chan error {
 
 			// If it's an directory and it matches our ignore
 			// clause, then skip looking at the whole directory
-			if w.ignore(filepath.Base(info.Name())) && info.IsDir() {
+			if ignore(filepath.Base(info.Name())) && info.IsDir() {
 				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return filepath.SkipDir
 			}
 
-			if w.ignore(filepath.Base(info.Name())) {
+			if ignore(filepath.Base(info.Name())) {
 				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return nil
 			}
@@ -240,4 +225,8 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 	}
 
 	return fi
+}
+
+func ignore(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }

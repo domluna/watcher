@@ -106,8 +106,9 @@ func (w *Watcher) addFiles(root string) error {
 func (w *Watcher) Watch() <-chan *FileEvent {
 	fchan := make(chan *FileEvent, 5)
 	go func() {
-		defer close(fchan)
 		defer func() {
+			close(fchan)
+			w.done <- struct{}{}
 			log.Println("EXITING GOROUTINE")
 		}()
 
@@ -118,20 +119,17 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 				// there's no reason for this goroutine to
 				// keep running.
 				if !ok {
-					log.Println("EXITING WATCH CHAN")
-					return
+					break
 				}
 				fchan <- parseEvent(ev)
 			case err, ok := <-w.fsw.Errors:
 				// If the channel is closed done has
 				// already been shutdown.
 				if !ok {
-					log.Println("EXITING WATCH CHAN")
-					return
+					break
 				}
-				log.Println(err)
-				w.done <- struct{}{}
-				return
+
+				log.Fatal(err)
 			}
 		}
 	}()

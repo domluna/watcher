@@ -1,9 +1,7 @@
 /*
 Package watcher provides a way to be notified of changes to files
-starting from the root of a given directory. Folder paths
-to ignore can be customized to fit needs.
+starting from the root of a given directory.
 
-Watcher does NOT handle filtering messages. It delegates
-this to the user for maximum flexibility.
+The Watcher ignores file/folders that begin with "." or "_".
 */
 package watcher

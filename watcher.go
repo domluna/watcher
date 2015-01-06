@@ -53,8 +53,6 @@ type Watcher struct {
 	done chan struct{}
 
 	closed bool
-
-	verbose bool
 }
 
 // wait waits for the watcher to shut down.
@@ -77,7 +75,6 @@ func (w *Watcher) Close() {
 	if w.closed {
 		return
 	}
-	log.Println("CLOSING WATCHER")
 	w.closed = true
 	w.done <- struct{}{}
 }
@@ -127,14 +124,12 @@ func (w *Watcher) addFiles(root string) error {
 }
 
 // Watch watches stuff.
-func (w *Watcher) Watch(verbose bool) <-chan *FileEvent {
-	w.verbose = verbose
+func (w *Watcher) Watch() <-chan *FileEvent {
 	fchan := make(chan *FileEvent, 5)
 	go func() {
 		defer func() {
 			close(fchan)
 			w.done <- struct{}{}
-			log.Println("EXITING GOROUTINE")
 		}()
 
 		for {
@@ -157,11 +152,9 @@ func (w *Watcher) Watch(verbose bool) <-chan *FileEvent {
 					}
 
 					if fi.IsDir() || w.validFile(pe.Path) {
-						log.Println("Adding", pe.Name)
 						w.fsw.Add(pe.Path)
 					}
 				case Remove:
-					log.Println("Removing", pe.Name)
 					w.fsw.Remove(pe.Path)
 				}
 
@@ -194,19 +187,16 @@ func (w *Watcher) walkFS(root string) <-chan error {
 			// If it's an directory and it matches our ignore
 			// clause, then skip looking at the whole directory
 			if ignore(filepath.Base(info.Name())) && info.IsDir() {
-				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return filepath.SkipDir
 			}
 
 			if info.Mode().IsRegular() && !w.validFile(path) {
-				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return nil
 			}
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				log.Println("Initially adding:", info.Name())
 				w.fsw.Add(path)
 			}()
 			return nil
@@ -276,14 +266,6 @@ func (w *Watcher) keep(ext string) bool {
 		}
 	}
 	return false
-}
-
-// debug prints the message, used if the Watcher
-// is set to verbose output.
-func (w *Watcher) debug(msg string) {
-	if w.verbose {
-		log.Println(msg)
-	}
 }
 
 // ignore ignores files that are prefixed with a dot

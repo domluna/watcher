@@ -109,7 +109,7 @@ func Test_DataRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fchan := w.Watch(false)
+	fchan := w.Watch(true)
 
 	go func() {
 		time.Sleep(time.Second * 2)

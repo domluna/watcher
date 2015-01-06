@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -34,6 +35,11 @@ type FileEvent struct {
 	Op
 }
 
+func (fe FileEvent) String() string {
+	return fmt.Sprintf("{\n\tPath: %s\n\tName: %s\n\tExt: %s\n\tOp: %s \n}",
+		fe.Path, fe.Name, fe.Ext, fe.Op)
+}
+
 // Watcher watches files for changes. It recursively
 // add files to be watched.
 type Watcher struct {
@@ -41,9 +47,13 @@ type Watcher struct {
 
 	files map[string]struct{}
 
+	extensions []string
+
 	done chan struct{}
 
-	isClosed bool
+	closed bool
+
+	verbose bool
 }
 
 // wait waits for the watcher to shut down.
@@ -63,16 +73,16 @@ func (w *Watcher) wait() {
 
 // Close closes the watcher.
 func (w *Watcher) Close() {
-	if w.isClosed {
+	if w.closed {
 		return
 	}
 	log.Println("CLOSING WATCHER")
-	w.isClosed = true
+	w.closed = true
 	w.done <- struct{}{}
 }
 
 // New creates a Watcher.
-func New(root string) (*Watcher, error) {
+func New(root string, types ...string) (*Watcher, error) {
 	w := Watcher{
 		done: make(chan struct{}),
 	}
@@ -82,6 +92,8 @@ func New(root string) (*Watcher, error) {
 	}
 
 	w.fsw = fsw
+
+	w.extensions = types
 
 	err = w.addFiles(root)
 	if err != nil {
@@ -106,7 +118,8 @@ func (w *Watcher) addFiles(root string) error {
 }
 
 // Watch watches stuff.
-func (w *Watcher) Watch() <-chan *FileEvent {
+func (w *Watcher) Watch(verbose bool) <-chan *FileEvent {
+	w.verbose = verbose
 	fchan := make(chan *FileEvent, 5)
 	go func() {
 		defer func() {
@@ -129,7 +142,12 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 				// Remove and add files from the watcher
 				switch pe.Op {
 				case Create:
-					if !ignore(pe.Name) {
+					fi, err := os.Stat(pe.Path)
+					if err != nil {
+						continue
+					}
+
+					if fi.IsDir() || w.validFile(pe.Path) {
 						log.Println("Adding", pe.Name)
 						w.fsw.Add(pe.Path)
 					}
@@ -171,7 +189,17 @@ func (w *Watcher) walkFS(root string) <-chan error {
 				return filepath.SkipDir
 			}
 
-			if ignore(filepath.Base(info.Name())) {
+			// if ignore(filepath.Base(info.Name())) {
+			// 	log.Println("Ignoring:", filepath.Base(info.Name()))
+			// 	return nil
+			// }
+			//
+			// if !w.keep(filepath.Ext(path)) {
+			// 	log.Println("Ignoring:", filepath.Base(info.Name()))
+			// 	return nil
+			// }
+
+			if info.Mode().IsRegular() && !w.validFile(path) {
 				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return nil
 			}
@@ -225,6 +253,33 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 	}
 
 	return fi
+}
+
+func (w *Watcher) validFile(path string) bool {
+	name := filepath.Base(path)
+	ext := filepath.Ext(path)
+	return !ignore(name) && w.keep(ext)
+}
+
+func (w *Watcher) keep(ext string) bool {
+	// Any file extension is kept
+	if len(w.extensions) == 0 {
+		return true
+	}
+
+	for _, ex := range w.extensions {
+		if ex == ext {
+			return true
+		}
+	}
+	return false
+}
+
+// debug prints the message
+func (w *Watcher) debug(msg string) {
+	if w.verbose {
+		log.Println(msg)
+	}
 }
 
 // ignore ignores files that are prefixed with a dot

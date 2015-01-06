@@ -35,6 +35,7 @@ type FileEvent struct {
 	Op
 }
 
+// Strings prints out the string representation of a FileEvent.
 func (fe FileEvent) String() string {
 	return fmt.Sprintf("{\n\tPath: %s\n\tName: %s\n\tExt: %s\n\tOp: %s \n}",
 		fe.Path, fe.Name, fe.Ext, fe.Op)
@@ -81,8 +82,16 @@ func (w *Watcher) Close() {
 	w.done <- struct{}{}
 }
 
-// New creates a Watcher.
-func New(root string, types ...string) (*Watcher, error) {
+// New creates a Watcher. The Watcher watches files
+// recursively from the root.
+//
+// Any number of extensions may be passed, if extensions are
+// passed the watcher only watches files with respect to the
+// extensions.
+//
+// Prefix the extension with a ".", for example go files would be
+// passed as ".go".
+func New(root string, extensions ...string) (*Watcher, error) {
 	w := Watcher{
 		done: make(chan struct{}),
 	}
@@ -93,7 +102,7 @@ func New(root string, types ...string) (*Watcher, error) {
 
 	w.fsw = fsw
 
-	w.extensions = types
+	w.extensions = extensions
 
 	err = w.addFiles(root)
 	if err != nil {
@@ -172,7 +181,7 @@ func (w *Watcher) Watch(verbose bool) <-chan *FileEvent {
 	return fchan
 }
 
-// walkFS walks the filesystem.
+// walkFS walks the filesystem and recursively adds files/directories.
 func (w *Watcher) walkFS(root string) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
@@ -188,16 +197,6 @@ func (w *Watcher) walkFS(root string) <-chan error {
 				log.Println("Ignoring:", filepath.Base(info.Name()))
 				return filepath.SkipDir
 			}
-
-			// if ignore(filepath.Base(info.Name())) {
-			// 	log.Println("Ignoring:", filepath.Base(info.Name()))
-			// 	return nil
-			// }
-			//
-			// if !w.keep(filepath.Ext(path)) {
-			// 	log.Println("Ignoring:", filepath.Base(info.Name()))
-			// 	return nil
-			// }
 
 			if info.Mode().IsRegular() && !w.validFile(path) {
 				log.Println("Ignoring:", filepath.Base(info.Name()))
@@ -255,12 +254,16 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 	return fi
 }
 
+// validFile determines whether a path should be
+// watched.
 func (w *Watcher) validFile(path string) bool {
 	name := filepath.Base(path)
 	ext := filepath.Ext(path)
 	return !ignore(name) && w.keep(ext)
 }
 
+// keep determines whether file, descrbed by ext
+// should be kept.
 func (w *Watcher) keep(ext string) bool {
 	// Any file extension is kept
 	if len(w.extensions) == 0 {
@@ -275,7 +278,8 @@ func (w *Watcher) keep(ext string) bool {
 	return false
 }
 
-// debug prints the message
+// debug prints the message, used if the Watcher
+// is set to verbose output.
 func (w *Watcher) debug(msg string) {
 	if w.verbose {
 		log.Println(msg)

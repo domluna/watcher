@@ -46,8 +46,6 @@ func (fe FileEvent) String() string {
 type Watcher struct {
 	fsw *fsnotify.Watcher
 
-	files map[string]struct{}
-
 	extensions []string
 
 	done chan struct{}
@@ -125,7 +123,7 @@ func (w *Watcher) addFiles(root string) error {
 
 // Watch watches stuff.
 func (w *Watcher) Watch() <-chan *FileEvent {
-	fchan := make(chan *FileEvent, 5)
+	fchan := make(chan *FileEvent, 10)
 	go func() {
 		defer func() {
 			close(fchan)

@@ -11,14 +11,6 @@ View the [docs](https://godoc.org/github.com/domluna/watcher)
 $ go get github.com/domluna/watcher
 ```
 
-### Testing
+### Use
 
-```
-$ go test --race
-```
-
-### TODO
-
-It's working just need to clean up some small things.
-
-TODO: finish parsing the fsnotify event for type of OP
+See test files and docs.

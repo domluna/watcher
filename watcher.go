@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/go-fsnotify/fsnotify"
 )
@@ -44,13 +43,12 @@ func (fe FileEvent) String() string {
 // Watcher watches files for changes. It recursively
 // add files to be watched.
 type Watcher struct {
-	fsw *fsnotify.Watcher
-
+	fsw        *fsnotify.Watcher
 	extensions []string
+	done       chan struct{}
+	closed     bool
 
-	done chan struct{}
-
-	closed bool
+	Events chan *FileEvent
 }
 
 // wait waits for the watcher to shut down.
@@ -98,6 +96,7 @@ func New(root string, extensions ...string) (*Watcher, error) {
 	w.fsw = fsw
 
 	w.extensions = extensions
+	w.Events = make(chan *FileEvent, 10)
 
 	err = w.addFiles(root)
 	if err != nil {
@@ -113,20 +112,19 @@ func New(root string, extensions ...string) (*Watcher, error) {
 // the watch list.
 func (w *Watcher) addFiles(root string) error {
 	root = os.ExpandEnv(root)
-	errc := w.walkFS(root)
 
-	if err := <-errc; err != nil && err != filepath.SkipDir {
+	err := w.walkFS(root)
+	if err != nil && err != filepath.SkipDir {
 		return err
 	}
 	return nil
 }
 
 // Watch watches stuff.
-func (w *Watcher) Watch() <-chan *FileEvent {
-	fchan := make(chan *FileEvent, 10)
+func (w *Watcher) Watch() {
 	go func() {
 		defer func() {
-			close(fchan)
+			close(w.Events)
 			w.done <- struct{}{}
 		}()
 
@@ -156,7 +154,7 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 					w.fsw.Remove(pe.Path)
 				}
 
-				fchan <- pe
+				w.Events <- pe
 			case err, ok := <-w.fsw.Errors:
 				// If the channel is closed done has
 				// already been shutdown.
@@ -168,45 +166,30 @@ func (w *Watcher) Watch() <-chan *FileEvent {
 			}
 		}
 	}()
-
-	return fchan
 }
 
 // walkFS walks the filesystem and recursively adds files/directories.
-func (w *Watcher) walkFS(root string) <-chan error {
-	errc := make(chan error, 1)
-	go func() {
-		var wg sync.WaitGroup
-		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
+func (w *Watcher) walkFS(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-			// If it's an directory and it matches our ignore
-			// clause, then skip looking at the whole directory
-			if ignore(filepath.Base(info.Name())) && info.IsDir() {
+		if info.IsDir() {
+			name := info.Name()
+			if shouldIgnore(name) && name != "." && name != ".." {
 				return filepath.SkipDir
 			}
+		}
 
-			if info.Mode().IsRegular() && !w.validFile(path) {
-				return nil
-			}
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				w.fsw.Add(path)
-			}()
+		// check if file is valid
+		if info.Mode().IsRegular() && !w.validFile(path) {
 			return nil
-		})
+		}
 
-		go func() {
-			wg.Wait()
-		}()
-		errc <- err
-
-	}()
-	return errc
+		w.fsw.Add(path)
+		return nil
+	})
 }
 
 // parseEvent parses the event wrapping it into a filevent
@@ -247,7 +230,7 @@ func parseEvent(ev fsnotify.Event) *FileEvent {
 func (w *Watcher) validFile(path string) bool {
 	name := filepath.Base(path)
 	ext := filepath.Ext(path)
-	return !ignore(name) && w.keep(ext)
+	return !shouldIgnore(name) && w.keep(ext)
 }
 
 // keep determines whether file, descrbed by ext
@@ -266,8 +249,8 @@ func (w *Watcher) keep(ext string) bool {
 	return false
 }
 
-// ignore ignores files that are prefixed with a dot
+// shouldIgnore ignores files that are prefixed with a dot
 // or underscore.
-func ignore(name string) bool {
+func shouldIgnore(name string) bool {
 	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }

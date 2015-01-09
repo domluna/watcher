@@ -109,7 +109,8 @@ func Test_DataRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fchan := w.Watch()
+
+	w.Watch()
 
 	go func() {
 		time.Sleep(time.Second * 2)
@@ -119,7 +120,7 @@ func Test_DataRace(t *testing.T) {
 	go func() {
 		for {
 			select {
-			case _, ok := <-fchan:
+			case _, ok := <-w.Events:
 				if !ok {
 					return
 				}

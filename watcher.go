@@ -48,6 +48,7 @@ type Watcher struct {
 	done       chan struct{}
 	closed     bool
 
+	// Events receives and sends file events.
 	Events chan *FileEvent
 }
 

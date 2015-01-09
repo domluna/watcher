@@ -61,8 +61,7 @@ func (w *Watcher) wait() {
 		select {
 		case <-w.done:
 			w.fsw.Close()
-			return
-		default:
+			break
 		}
 	}
 }

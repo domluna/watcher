@@ -138,24 +138,26 @@ func (w *Watcher) Watch() {
 				if !ok {
 					break
 				}
-				pe := parseEvent(ev)
+				fe := parseEvent(ev)
 
 				// Remove and add files from the watcher
-				switch pe.Op {
+				switch fe.Op {
 				case Create:
-					fi, err := os.Stat(pe.Path)
+					fi, err := os.Stat(fe.Path)
 					if err != nil {
 						continue
 					}
 
-					if fi.IsDir() || w.validFile(pe.Path) {
-						w.fsw.Add(pe.Path)
+					if fi.IsDir() || w.validFile(fe.Path) {
+						fmt.Println("watcher: detected creation", fe.Name)
+						w.fsw.Add(fe.Path)
 					}
 				case Remove:
-					w.fsw.Remove(pe.Path)
+					fmt.Println("watcher: detected deletion", fe.Name)
+					w.fsw.Remove(fe.Path)
 				}
 
-				w.Events <- pe
+				w.Events <- fe
 			case err, ok := <-w.fsw.Errors:
 				// If the channel is closed done has
 				// already been shutdown.
@@ -188,6 +190,7 @@ func (w *Watcher) walkFS(root string) error {
 			return nil
 		}
 
+		fmt.Println("watcher: adding", info.Name())
 		w.fsw.Add(path)
 		return nil
 	})

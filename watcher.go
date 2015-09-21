@@ -49,7 +49,48 @@ type Watcher struct {
 	closed     bool
 
 	// Events receives and sends file events.
-	Events chan *FileEvent
+	Events chan FileEvent
+}
+
+// New creates a Watcher. The Watcher watches files
+// recursively from the root.
+//
+// By default all file extensions are watched. If extension arguments
+// are passed
+//
+// 	w, err := watcher.New("foo", []string{"md", "js"})
+//
+// then only the files with the passed extensions are watched. In the
+// example above only Markdown and Javascript are watched.
+func New(root string, extensions []string) (*Watcher, error) {
+	w := Watcher{
+		done: make(chan struct{}),
+	}
+
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, err
+	}
+	w.fsw = fsw
+
+	// setup extensions
+	w.extensions = make([]string, 0)
+	if extensions != nil {
+		for _, e := range extensions {
+			w.extensions = append(w.extensions, "."+e)
+		}
+	}
+
+	w.Events = make(chan FileEvent, 5)
+
+	err = w.addFiles(root)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait for the close signal.
+	go w.wait()
+	return &w, nil
 }
 
 // wait waits for the watcher to shut down.
@@ -73,39 +114,6 @@ func (w *Watcher) Close() {
 	}
 	w.closed = true
 	w.done <- struct{}{}
-}
-
-// New creates a Watcher. The Watcher watches files
-// recursively from the root.
-//
-// Any number of extensions may be passed, if extensions are
-// passed the watcher only watches files with respect to the
-// extensions.
-//
-// Prefix the extension with a ".", for example go files would be
-// passed as ".go".
-func New(root string, extensions ...string) (*Watcher, error) {
-	w := Watcher{
-		done: make(chan struct{}),
-	}
-	fsw, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, err
-	}
-
-	w.fsw = fsw
-
-	w.extensions = extensions
-	w.Events = make(chan *FileEvent, 10)
-
-	err = w.addFiles(root)
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for the close signal.
-	go w.wait()
-	return &w, nil
 }
 
 // AddFiles starts to recurse from the root and add files to
@@ -148,11 +156,9 @@ func (w *Watcher) Watch() {
 					}
 
 					if fi.IsDir() || w.validFile(fe.Path) {
-						fmt.Println("watcher: detected creation", fe.Name)
 						w.fsw.Add(fe.Path)
 					}
 				case Remove:
-					fmt.Println("watcher: detected deletion", fe.Name)
 					w.fsw.Remove(fe.Path)
 				}
 
@@ -189,7 +195,6 @@ func (w *Watcher) walkFS(root string) error {
 			return nil
 		}
 
-		fmt.Println("watcher: adding", info.Name())
 		w.fsw.Add(path)
 		return nil
 	})
@@ -197,10 +202,10 @@ func (w *Watcher) walkFS(root string) error {
 
 // parseEvent parses the event wrapping it into a filevent
 // making it easier to work with.
-func parseEvent(ev fsnotify.Event) *FileEvent {
+func parseEvent(ev fsnotify.Event) FileEvent {
 	spl := strings.Split(ev.String(), ": ")
 
-	fi := &FileEvent{}
+	fi := FileEvent{}
 
 	if len(spl) > 0 {
 		path := spl[0]

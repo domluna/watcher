@@ -1,3 +1,7 @@
+// package watcher watches files in a directory recursively.
+//
+// It's meant to be used as a building block for tools that
+// watch files.
 package watcher
 
 import (
@@ -162,7 +166,10 @@ func (w *Watcher) Watch() {
 					w.fsw.Remove(fe.Path)
 				}
 
-				w.Events <- fe
+				// pass event along only if file is valid
+				if w.validFile(fe.Path) {
+					w.Events <- fe
+				}
 			case err, ok := <-w.fsw.Errors:
 				// If the channel is closed done has
 				// already been shutdown.

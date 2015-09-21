@@ -11,13 +11,13 @@ import (
 
 var (
 	testDir    string
-	writeFile1 *os.File
-	writeFile2 *os.File
+	mdFile     *os.File
+	jsFile     *os.File
 	ignoreFile *os.File
 )
 
 const (
-	testDuration  = time.Second * 4
+	testDuration  = time.Second * 1
 	writeInterval = time.Millisecond * 10
 )
 
@@ -38,12 +38,12 @@ func init() {
 		panic(err)
 	}
 
-	writeFile1, err = ioutil.TempFile(t1, "bar1")
+	mdFile, err = ioutil.TempFile(t1, "bar1.md")
 	if err != nil {
 		panic(err)
 	}
 
-	writeFile2, err = ioutil.TempFile(testDir, "bar2")
+	jsFile, err = ioutil.TempFile(testDir, "bar2.js")
 	if err != nil {
 		panic(err)
 	}
@@ -55,14 +55,9 @@ func init() {
 }
 
 // Any changes to files stored in dotfile directories should be ignored
-func Test_IgnoreDotfiles(t *testing.T) {
+func Test_Watcher(t *testing.T) {
 	done := make(chan struct{})
-	defer func() {
-		close(done)
-		ignoreFile.Close()
-	}()
-
-	w, err := watcher.New(testDir, nil)
+	w, err := watcher.New(testDir, []string{"js"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,76 +67,27 @@ func Test_IgnoreDotfiles(t *testing.T) {
 		for {
 			select {
 			case <-done:
-				w.Close()
 				return
 			default:
 				ignoreFile.Write([]byte("HELLO"))
+				mdFile.Write([]byte("HELLO"))
+				jsFile.Write([]byte("HELLO"))
 				time.Sleep(writeInterval)
 			}
 		}
 	}()
 
 	go func() {
-		time.Sleep(1 * time.Second)
-		_, err := ioutil.TempFile(testDir, ".dotfile")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	time.Sleep(testDuration)
-	done <- struct{}{}
-}
-
-// Idea here is we're writing to 2 files that are being watched.
-// Also during halfway through the test we shutdown the watcher,
-// thus if races were to occur during shutdown they would be found
-// here as well.
-func Test_DataRace(t *testing.T) {
-	done := make(chan struct{})
-	defer func() {
-		close(done)
-		writeFile1.Close()
-		writeFile2.Close()
-	}()
-
-	w, err := watcher.New(testDir, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	w.Watch()
-
-	go func() {
-		time.Sleep(time.Second * 2)
-		w.Close()
-	}()
-
-	go func() {
-		for {
-			select {
-			case _, ok := <-w.Events:
-				if !ok {
-					return
+		select {
+		case fe, ok := <-w.Events:
+			if ok {
+				if fe.Ext != ".js" {
+					t.Fatal("should only be responding to files with .js extension")
 				}
-			default:
-			}
-
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				writeFile1.Write([]byte("HELLO"))
-				writeFile2.Write([]byte("HELLO"))
-				time.Sleep(writeInterval)
 			}
 		}
 	}()
+
 	time.Sleep(testDuration)
 	done <- struct{}{}
 }
